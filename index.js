@@ -7,6 +7,10 @@
 const path = require('path');
 const restify = require('restify');
 
+//add telemetry packages
+const { ApplicationInsightsTelemetryClient, TelemetryInitializerMiddleware,NullTelemetryClient } = require('botbuilder-applicationinsights');
+const { TelemetryLoggerMiddleware } = require('botbuilder-core');
+
 // Import required bot services. See https://aka.ms/bot-services to learn more about the different parts of a bot.
 const { BotFrameworkAdapter, ConversationState, MemoryStorage, UserState } = require('botbuilder');
 
@@ -47,11 +51,18 @@ adapter.onTurnError = async (context, error) => {
         'https://www.botframework.com/schemas/error',
         'TurnError'
     );
-
+    
     // Send a message to the user
     await context.sendActivity('The bot encountered an error or bug.');
     await context.sendActivity('To continue to run this bot, please fix the bot source code.');
 };
+
+// Add telemetry middleware to the adapter middleware pipeline
+var telemetryClient = getTelemetryClient(process.env.InstrumentationKey);
+var telemetryLoggerMiddleware = new TelemetryLoggerMiddleware(telemetryClient,true);
+var initializerMiddleware = new TelemetryInitializerMiddleware(telemetryLoggerMiddleware,true);
+adapter.use(initializerMiddleware);
+
 
 // Define the state store for your bot. See https://aka.ms/about-bot-state to learn more about using MemoryStorage.
 // A bot requires a state storage system to persist the dialog and user state between messages.
@@ -84,6 +95,8 @@ const dialog = new RootDialog(process.env.QnAKnowledgebaseId, endpointKey, endpo
 // Create the bot's main handler.
 const bot = new QnABot(conversationState, userState, dialog);
 
+dialog.telemetryClient = telemetryClient;
+
 // Listen for incoming requests.
 server.post('/api/messages', (req, res) => {
     adapter.processActivity(req, res, async (turnContext) => {
@@ -91,6 +104,18 @@ server.post('/api/messages', (req, res) => {
         await bot.run(turnContext);
     });
 });
+
+// Enable the Application Insights middleware, which helps correlate all activity
+// based on the incoming request.
+server.use(restify.plugins.bodyParser());
+
+// Creates a new TelemetryClient based on a instrumentation key
+function getTelemetryClient(instrumentationKey) {
+    if (instrumentationKey) {
+        return new ApplicationInsightsTelemetryClient(instrumentationKey);
+    }
+    return new NullTelemetryClient();
+}
 
 // SIG // Begin signature block
 // SIG // MIInSQYJKoZIhvcNAQcCoIInOjCCJzYCAQExDzANBglg

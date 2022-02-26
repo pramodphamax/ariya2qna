@@ -10,7 +10,7 @@ const {
 } = require('botbuilder-core');
 
 // Default parameters
-const DefaultThreshold = 0.3;
+const DefaultThreshold = 0.2;
 const DefaultTopN = 3;
 const DefaultNoAnswer = 'No QnAMaker answers found.';
 
@@ -33,6 +33,7 @@ class QnAMakerBaseDialog extends QnAMakerDialog {
         super(knowledgebaseId, authkey, host, noAnswer, DefaultThreshold, DefaultCardTitle, DefaultCardNoMatchText,
             DefaultTopN, ActivityFactory.cardNoMatchResponse, filters, QNAMAKER_BASE_DIALOG);
         this.id = QNAMAKER_BASE_DIALOG;
+        
     }
 }
 
