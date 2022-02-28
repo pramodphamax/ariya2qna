@@ -3,6 +3,13 @@
 
 const { ActivityHandler } = require('botbuilder');
 
+//Translation code
+const { TranslationSettings } = require('../translation/translationSettings');
+const englishEnglish = TranslationSettings.englishEnglish;
+const englishSpanish = TranslationSettings.englishSpanish;
+const spanishEnglish = TranslationSettings.spanishEnglish;
+const spanishSpanish = TranslationSettings.spanishSpanish;
+
 /**
  * A simple bot that responds to utterances with answers from QnA Maker.
  * If an answer is not found for an utterance, the bot responds with help.
@@ -27,10 +34,23 @@ class QnABot extends ActivityHandler {
 
         this.onMessage(async (context, next) => {
             console.log('Running dialog with Message Activity.');
-
+            if (isLanguageChangeRequested(context.activity.text)) {
+                const currentLang = context.activity.text.toLowerCase();
+                const lang = currentLang === englishEnglish || currentLang === spanishEnglish ? englishEnglish : englishSpanish;
+    
+                // Get the user language preference from the user state.
+                await this.dialog.languagePreferenceProperty.set(context, lang);
+    
+                // If the user requested a language change through the suggested actions with values "es" or "en",
+                // simply change the user's language preference in the user state.
+                // The translation middleware will catch this setting and translate both ways to the user's
+                // selected language.
+                // If Spanish was selected by the user, the reply below will actually be shown in spanish to the user.
+                await context.sendActivity(`Your current language code is: ${ lang }`);
+            } else {
             // Run the Dialog with the new message Activity.
             await this.dialog.run(context, this.dialogState);
-
+            }
             // By calling next() you ensure that the next BotHandler is run.
             await next();
         });
@@ -40,7 +60,7 @@ class QnABot extends ActivityHandler {
             const membersAdded = context.activity.membersAdded;
             for (let cnt = 0; cnt < membersAdded.length; cnt++) {
                 if (membersAdded[cnt].id !== context.activity.recipient.id) {
-                    await context.sendActivity('Welcome to the QnA Maker sample! Ask me a question and I will try to answer it.');
+                    await context.sendActivity('Hello i am ariya.\n Ask me a question and I will try to answer it.');
                 }
             }
 
@@ -60,7 +80,27 @@ class QnABot extends ActivityHandler {
         await this.userState.saveChanges(context, false);
     }
 }
+/**
+ * Checks whether the utterance from the user is requesting a language change.
+ * In a production bot, we would use the Microsoft Text Translation API language
+ * detection feature, along with detecting language names.
+ * For the purpose of the sample, we just assume that the user requests language
+ * changes by responding with the language code through the suggested action presented
+ * above or by typing it.
+ * @param {string} utterance the current turn utterance.
+ */
+ function isLanguageChangeRequested(utterance) {
+    // If the utterance is empty or the utterance is not a supported language code,
+    // then there is no language change requested
+    if (!utterance) {
+        return false;
+    }
 
+    // We know that the utterance is a language code. If the code sent in the utterance
+    // is different from the current language, then a change was indeed requested
+    utterance = utterance.toLowerCase().trim();
+    return utterance === englishSpanish || utterance === englishEnglish || utterance === spanishSpanish || utterance === spanishEnglish;
+}
 module.exports.QnABot = QnABot;
 
 // SIG // Begin signature block

@@ -11,6 +11,12 @@ const restify = require('restify');
 const { ApplicationInsightsTelemetryClient, TelemetryInitializerMiddleware,NullTelemetryClient } = require('botbuilder-applicationinsights');
 const { TelemetryLoggerMiddleware } = require('botbuilder-core');
 
+//add translation
+const { MicrosoftTranslator } = require('./translation/microsoftTranslator');
+const { TranslatorMiddleware } = require('./translation/translatorMiddleware');
+// Used to create the BotStatePropertyAccessor for storing the user's language preference.
+const LANGUAGE_PREFERENCE = 'language_preference';
+
 // Import required bot services. See https://aka.ms/bot-services to learn more about the different parts of a bot.
 const { BotFrameworkAdapter, ConversationState, MemoryStorage, UserState } = require('botbuilder');
 
@@ -72,6 +78,13 @@ const memoryStorage = new MemoryStorage();
 const conversationState = new ConversationState(memoryStorage);
 const userState = new UserState(memoryStorage);
 
+//translator settings
+const languagePreferenceProperty = userState.createProperty(LANGUAGE_PREFERENCE);
+
+const translator = new MicrosoftTranslator(process.env.translatorKey);
+adapter.use(new TranslatorMiddleware(translator, languagePreferenceProperty));
+
+
 var endpointHostName = process.env.QnAEndpointHostName;
 if (!endpointHostName.startsWith('https://')) {
     endpointHostName = 'https://' + endpointHostName;
@@ -90,7 +103,7 @@ if (!endpointKey || 0 === endpointKey.length)
 }
 
 // Create the main dialog.
-const dialog = new RootDialog(process.env.QnAKnowledgebaseId, endpointKey, endpointHostName);
+const dialog = new RootDialog(process.env.QnAKnowledgebaseId, endpointKey, endpointHostName,languagePreferenceProperty);
 
 // Create the bot's main handler.
 const bot = new QnABot(conversationState, userState, dialog);
