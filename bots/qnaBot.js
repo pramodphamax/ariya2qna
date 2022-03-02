@@ -60,7 +60,7 @@ class QnABot extends ActivityHandler {
             const membersAdded = context.activity.membersAdded;
             for (let cnt = 0; cnt < membersAdded.length; cnt++) {
                 if (membersAdded[cnt].id !== context.activity.recipient.id) {
-                    await context.sendActivity('Hello i am ariya.\n Ask me a question and I will try to answer it.');
+                    await context.sendActivity('Hello I am ariya.\n Ask me a question and I will try to answer it.');
                 }
             }
 
