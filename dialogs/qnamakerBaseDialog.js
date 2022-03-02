@@ -10,7 +10,7 @@ const {
 } = require('botbuilder-core');
 
 // Default parameters
-const DefaultThreshold = 0.7;
+const DefaultThreshold = 0.3;
 const DefaultTopN = 3;
 const DefaultNoAnswer = 'No QnAMaker answers found.';
 

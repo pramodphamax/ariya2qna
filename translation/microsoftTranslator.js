@@ -2,6 +2,11 @@
 // Licensed under the MIT License.
 
 const fetch = require('node-fetch');
+const { TranslationSettings } = require('./translationSettings');
+const englishEnglish = TranslationSettings.englishEnglish;
+const englishSpanish = TranslationSettings.englishSpanish;
+const spanishEnglish = TranslationSettings.spanishEnglish;
+const spanishSpanish = TranslationSettings.spanishSpanish;
 
 class MicrosoftTranslator {
     constructor(translatorKey) {
@@ -14,6 +19,14 @@ class MicrosoftTranslator {
    * @param {string} targetLocale Two character language code, e.g. "en", "es"
    */
     async translate(text, targetLocale) {
+        
+        const ignoreLangsettings = text.toLowerCase().trim();
+        if (ignoreLangsettings === englishSpanish || ignoreLangsettings === englishEnglish 
+            || ignoreLangsettings === spanishSpanish || ignoreLangsettings === spanishEnglish){
+                return text;
+        }
+        
+        
         // From Microsoft Text Translator API docs;
         // https://docs.microsoft.com/en-us/azure/cognitive-services/translator/quickstart-nodejs-translate
         const host = 'https://api.deepl.com/v2/translate';
@@ -55,7 +68,7 @@ class MicrosoftTranslator {
         } else {
             return text;
         }
-        return text;
+    
     }
 }
 

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 const { ActivityTypes } = require('botbuilder');
+
 const { TranslationSettings } = require('./translationSettings');
 
 const DEFAULT_LANGUAGE = TranslationSettings.englishEnglish;
@@ -61,7 +62,8 @@ class TranslatorMiddleware {
             activity.text = await this.translator.translate(activity.text, targetLocale);
             if(activity.attachments){
                 for(const button of activity.attachments[0]['content']['buttons'] ){
-                    button.title = button.value = await this.translator.translate(button.value, targetLocale);
+                    button.value = await this.translator.translate(button.value, targetLocale);
+                    button.title = await this.translator.translate(button.title, targetLocale);
                 }
             }
         }
@@ -70,6 +72,8 @@ class TranslatorMiddleware {
     async shouldTranslate(context) {
         const userLanguage = await this.languagePreferenceProperty.get(context, DEFAULT_LANGUAGE);
         return userLanguage !== DEFAULT_LANGUAGE;
+
+    
     };
 }
 
