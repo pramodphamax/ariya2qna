@@ -18,14 +18,46 @@ const { TranslatorMiddleware } = require('./translation/translatorMiddleware');
 const LANGUAGE_PREFERENCE = 'language_preference';
 
 // Import required bot services. See https://aka.ms/bot-services to learn more about the different parts of a bot.
-const { BotFrameworkAdapter, ConversationState, MemoryStorage, UserState } = require('botbuilder');
+const { BotFrameworkAdapter, 
+    //ConversationState, 
+   // MemoryStorage, 
+    UserState,
+    ActivityTypes,
+    ChannelServiceRoutes,
+    CloudAdapter,
+    CloudSkillHandler,
+    ConfigurationServiceClientCredentialFactory,
+    ConversationState,
+    createBotFrameworkAuthenticationFromConfiguration,
+    InputHints,
+    MemoryStorage,
+    SkillConversationIdFactory,
+    TurnContext
+} = require('botbuilder');
+
+const {
+    allowedCallersClaimsValidator,
+    AuthenticationConfiguration,
+    AuthenticationConstants
+} = require('botframework-connector');
 
 const { QnABot } = require('./bots/QnABot');
 const { RootDialog } = require('./dialogs/rootDialog');
+const { SkillsConfiguration } = require('./skillsConfiguration');
+
+
 
 // Note: Ensure you have a .env file and include QnAMakerKnowledgeBaseId, QnAMakerEndpointKey and QnAMakerHost.
 const ENV_FILE = path.join(__dirname, '.env');
 require('dotenv').config({ path: ENV_FILE });
+
+
+// Load skills configuration
+const skillsConfig = new SkillsConfiguration();
+
+const allowedSkills = Object.values(skillsConfig.skills).map(skill => skill.appId);
+
+const claimsValidators = allowedCallersClaimsValidator(allowedSkills);
 
 // Create HTTP server.
 const server = restify.createServer();
@@ -35,12 +67,44 @@ server.listen(process.env.port || process.env.PORT || 3978, function() {
     console.log('\nTo talk to your bot, open the emulator select "Open Bot"');
 });
 
+//Merging from skill to skill
+// If the MicrosoftAppTenantId is specified in the environment config, add the tenant as a valid JWT token issuer for Bot to Skill conversation.
+// The token issuer for MSI and single tenant scenarios will be the tenant where the bot is registered.
+let validTokenIssuers = [];
+/*
+const { MicrosoftAppTenantId } = process.env;
+
+if (MicrosoftAppTenantId) {
+    // For SingleTenant/MSI auth, the JWT tokens will be issued from the bot's home tenant.
+    // Therefore, these issuers need to be added to the list of valid token issuers for authenticating activity requests.
+    validTokenIssuers = [
+        `${ AuthenticationConstants.ValidTokenIssuerUrlTemplateV1 }${ MicrosoftAppTenantId }/`,
+        `${ AuthenticationConstants.ValidTokenIssuerUrlTemplateV2 }${ MicrosoftAppTenantId }/v2.0/`,
+        `${ AuthenticationConstants.ValidGovernmentTokenIssuerUrlTemplateV1 }${ MicrosoftAppTenantId }/`,
+        `${ AuthenticationConstants.ValidGovernmentTokenIssuerUrlTemplateV2 }${ MicrosoftAppTenantId }/v2.0/`
+    ];
+}
+*/
+
+// Define our authentication configuration.
+const authConfig = new AuthenticationConfiguration([], claimsValidators, validTokenIssuers);
+
+const credentialsFactory = new ConfigurationServiceClientCredentialFactory({
+    MicrosoftAppId: process.env.MicrosoftAppIdd,
+    MicrosoftAppPassword: process.env.MicrosoftAppPasswordd,
+  //  MicrosoftAppType: process.env.MicrosoftAppType,
+  // MicrosoftAppTenantId: process.env.MicrosoftAppTenantId
+});
+
+const botFrameworkAuthentication = createBotFrameworkAuthenticationFromConfiguration(null, credentialsFactory, authConfig);
+
 // Create adapter.
 // See https://aka.ms/about-bot-adapter to learn more about adapters.
 const adapter = new BotFrameworkAdapter({
     appId: process.env.MicrosoftAppId,
     appPassword: process.env.MicrosoftAppPassword
 });
+
 
 // Catch-all for errors.
 adapter.onTurnError = async (context, error) => {
@@ -59,10 +123,70 @@ adapter.onTurnError = async (context, error) => {
     );
     
     // Send a message to the user
-    await context.sendActivity('The bot encountered an error or bug.');
-    await context.sendActivity('To continue to run this bot, please fix the bot source code.');
+    //await context.sendActivity('The bot encountered an error or bug.');
+    //await context.sendActivity('To continue to run this bot, please fix the bot source code.');
+    await sendErrorMessage(context, error);
+    await endSkillConversation(context);
+    await clearConversationState(context);
+
 };
 
+async function sendErrorMessage(context, error) {
+    try {
+        // Send a message to the user.
+        let onTurnErrorMessage = 'The bot encountered an error or bug.';
+        await context.sendActivity(onTurnErrorMessage, onTurnErrorMessage, InputHints.IgnoringInput);
+
+        onTurnErrorMessage = 'To continue to run this bot, please fix the bot source code.';
+        await context.sendActivity(onTurnErrorMessage, onTurnErrorMessage, InputHints.ExpectingInput);
+
+        // Send a trace activity, which will be displayed in Bot Framework Emulator.
+        await context.sendTraceActivity(
+            'OnTurnError Trace',
+            `${ error }`,
+            'https://www.botframework.com/schemas/error',
+            'TurnError'
+        );
+    } catch (err) {
+        console.error(`\n [onTurnError] Exception caught in sendErrorMessage: ${ err }`);
+    }
+}
+
+async function endSkillConversation(context) {
+    try {
+        // Inform the active skill that the conversation is ended so that it has
+        // a chance to clean up.
+        // Note: ActiveSkillPropertyName is set by the RooBot while messages are being
+        // forwarded to a Skill.
+        const activeSkill = await conversationState.createProperty(QnABot.ActiveSkillPropertyName).get(context);
+        if (activeSkill) {
+            const botId = process.env.MicrosoftAppId;
+
+            let endOfConversation = {
+                type: ActivityTypes.EndOfConversation,
+                code: 'RootSkillError'
+            };
+            endOfConversation = TurnContext.applyConversationReference(
+                endOfConversation, TurnContext.getConversationReference(context.activity), true);
+
+            await conversationState.saveChanges(context, true);
+            await skillClient.postActivity(botId, activeSkill.appId, activeSkill.skillEndpoint, skillsConfig.skillHostEndpoint, endOfConversation.conversation.id, endOfConversation);
+        }
+    } catch (err) {
+        console.error(`\n [onTurnError] Exception caught on attempting to send EndOfConversation : ${ err }`);
+    }
+}
+
+async function clearConversationState(context) {
+    try {
+        // Delete the conversationState for the current conversation to prevent the
+        // bot from getting stuck in a error-loop caused by being in a bad state.
+        // ConversationState should be thought of as similar to "cookie-state" in a Web page.
+        await conversationState.delete(context);
+    } catch (err) {
+        console.error(`\n [onTurnError] Exception caught on attempting to Delete ConversationState : ${ err }`);
+    }
+}
 // Add telemetry middleware to the adapter middleware pipeline
 var telemetryClient = getTelemetryClient(process.env.InstrumentationKey);
 var telemetryLoggerMiddleware = new TelemetryLoggerMiddleware(telemetryClient,true);
@@ -77,6 +201,12 @@ const memoryStorage = new MemoryStorage();
 // Create conversation and user state with in-memory storage provider.
 const conversationState = new ConversationState(memoryStorage);
 const userState = new UserState(memoryStorage);
+
+// Create the conversationIdFactory
+const conversationIdFactory = new SkillConversationIdFactory(new MemoryStorage());
+
+// Create the skill client.
+const skillClient = botFrameworkAuthentication.createBotFrameworkClient();
 
 //translator settings
 const languagePreferenceProperty = userState.createProperty(LANGUAGE_PREFERENCE);
@@ -106,7 +236,7 @@ if (!endpointKey || 0 === endpointKey.length)
 const dialog = new RootDialog(process.env.QnAKnowledgebaseId, endpointKey, endpointHostName,languagePreferenceProperty);
 
 // Create the bot's main handler.
-const bot = new QnABot(conversationState, userState, dialog);
+const bot = new QnABot(conversationState, userState, dialog,  skillsConfig, skillClient, conversationIdFactory);
 
 dialog.telemetryClient = telemetryClient;
 
@@ -121,6 +251,10 @@ server.post('/api/messages', (req, res) => {
 // Enable the Application Insights middleware, which helps correlate all activity
 // based on the incoming request.
 server.use(restify.plugins.bodyParser());
+
+const handler = new CloudSkillHandler(adapter, (context) => bot.run(context), conversationIdFactory, botFrameworkAuthentication);
+const skillEndpoint = new ChannelServiceRoutes(handler);
+skillEndpoint.register(server, '/api/skills');
 
 // Creates a new TelemetryClient based on a instrumentation key
 function getTelemetryClient(instrumentationKey) {
