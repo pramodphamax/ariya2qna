@@ -91,12 +91,12 @@ class QnABot extends ActivityHandler {
             // Run the Dialog with the new message Activity.
             await this.dialog.run(context, this.dialogState);
             }
-            // Handle EndOfConversation returned by the skill.
+            
                    
             // By calling next() you ensure that the next BotHandler is run.
             await next();
         });
-
+        // Handle EndOfConversation returned by the skill.
         this.onEndOfConversation(async (context, next) => {
             // Stop forwarding activities to Skill.
             await this.activeSkillProperty.set(context, undefined);

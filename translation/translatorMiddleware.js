@@ -59,7 +59,11 @@ class TranslatorMiddleware {
 
     async translateMessageActivity(activity, targetLocale) {
         if (activity.type === ActivityTypes.Message) {
-            activity.text = await this.translator.translate(activity.text, targetLocale);
+            if(typeof activity.text == 'undefined'){
+                activity.attachments[0]['content'].title = await this.translator.translate(activity.attachments[0]['content'].title, targetLocale);
+            }
+            else if(typeof activity.text !== 'undefined'){activity.text = await this.translator.translate(activity.text, targetLocale);}
+
             if(activity.attachments){
                 for(const button of activity.attachments[0]['content']['buttons'] ){
                     button.value = await this.translator.translate(button.value, targetLocale);
